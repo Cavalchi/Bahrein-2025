@@ -1,6 +1,7 @@
-# 🏁 F1 Performance Strategy Simulation — Bahrain GP 2025
+# 🏁 F1 Performance Strategy Simulation — Bahrain GP 2025  
+_Simulação estratégica com dados reais e modelagem de desempenho de pneus em corrida_
 
-Este projeto é uma **análise estratégica de stint final** baseada em dados reais da Fórmula 1, usando a biblioteca [FastF1](https://theoehrly.github.io/Fast-F1/). Exploramos como **Oscar Piastri poderia ajudar Lando Norris a ultrapassar George Russell** manipulando o ritmo em função do desgaste dos pneus e do ar sujo.
+Este projeto é uma análise estratégica de stint final baseada em dados reais da Fórmula 1, utilizando a biblioteca FastF1. A proposta é simular como Oscar Piastri poderia beneficiar Lando Norris ao manipular o ritmo de corrida, gerando desgaste nos pneus de George Russell por meio do efeito de ar sujo.
 
 ---
 
