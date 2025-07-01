@@ -1,103 +1,118 @@
+# --- F1 Strategy Simulation Engine v2.0 ---
+# Autor: João Pedro Cavalchi de Carvalho
+
 import fastf1
-from fastf1 import get_session
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import timedelta
 
-#  Configuração inicial 
-session = get_session(2025, 'Bahrain', 'R')
-session.load()
+def simular_batalha_final(session, piloto_cacador, piloto_alvo, volta_inicial, gap_inicial, penalidade_ar_sujo=0.15, perda_ritmo_pneu=0.05):
+    """
+    Simula uma batalha de final de corrida, modelando o efeito do ar sujo e desgaste de pneus.
 
-# Definindo os pilotos e coletando dados dos stints finais 
-drivers = {'Russell': '63', 'Norris': '4'}
-laps = session.laps
+    Args:
+        session: Objeto da sessão do FastF1 já carregado.
+        piloto_cacador (str): Sigla do piloto que está caçando (ex: 'NOR').
+        piloto_alvo (str): Sigla do piloto que está sendo caçado (ex: 'RUS').
+        volta_inicial (int): Volta em que a simulação começa.
+        gap_inicial (float): Diferença de tempo em segundos no início da simulação.
+        penalidade_ar_sujo (float): Segundos de penalidade por volta para o piloto de trás.
+        perda_ritmo_pneu (float): Segundos que o pneu do piloto alvo perde a cada volta.
 
-# Coletando os dados reais de Norris e Russell
-voltas_russell = laps.pick_driver(drivers['Russell']).copy()
-voltas_norris = laps.pick_driver(drivers['Norris']).copy()
-
-# Focando nas voltas finais após o pit stop (voltando do 52 até a 57)
-voltas_russell = voltas_russell[(voltas_russell['LapNumber'] >= 52) & (voltas_russell['LapNumber'] <= 57)]
-voltas_norris = voltas_norris[(voltas_norris['LapNumber'] >= 52) & (voltas_norris['LapNumber'] <= 57)]
-
-# Convertendo os tempos para segundos
-voltas_russell['LapTimeSeconds'] = voltas_russell['LapTime'].dt.total_seconds()
-voltas_norris['LapTimeSeconds'] = voltas_norris['LapTime'].dt.total_seconds()
-
-# Função auxiliar para formatar tempo 
-def format_time(seconds):
-    mins = int(seconds // 60)
-    secs = seconds % 60
-    return f"{mins}:{secs:04.1f}"
-
-#Simulação simplificada (modelo teórico) 
-norris_times = voltas_norris['LapTimeSeconds'].values
-russell_times = voltas_russell['LapTimeSeconds'].values
-
-
-initial_gap = 2.6 
-dirty_air_penalty = 0.15  
-pace_drop_per_lap = 0.1  
-
-
-gap_evolution = [initial_gap]
-ultrapassagem_volta = None
-
-
-for i, (n_time, r_time) in enumerate(zip(norris_times, russell_times)):
-    r_time_simulated = r_time + dirty_air_penalty + (i * pace_drop_per_lap)
-    gap_change = r_time_simulated - n_time
-    current_gap = gap_evolution[-1] - gap_change
-
+    Returns:
+        dict: Um dicionário contendo os resultados da simulação.
+    """
+    print(f"\n--- Iniciando Simulação: {piloto_cacador} vs {piloto_alvo} ---")
     
-    if current_gap < 0 and ultrapassagem_volta is None:
-        ultrapassagem_volta = 52 + i + 1
+    laps = session.laps
+    voltas_cacador = laps.pick_driver(piloto_cacador).copy()
+    voltas_alvo = laps.pick_driver(piloto_alvo).copy()
+    
+    # Filtra as voltas relevantes para a simulação
+    voltas_cacador = voltas_cacador[voltas_cacador['LapNumber'] >= volta_inicial]
+    voltas_alvo = voltas_alvo[voltas_alvo['LapNumber'] >= volta_inicial]
+    
+    if voltas_cacador.empty or voltas_alvo.empty:
+        print("!!! Erro: Não foram encontrados dados de voltas para um dos pilotos no período especificado.")
+        return None
 
-    gap_evolution.append(current_gap)
+    # Converte tempos para segundos
+    voltas_cacador['LapTimeSeconds'] = voltas_cacador['LapTime'].dt.total_seconds()
+    voltas_alvo['LapTimeSeconds'] = voltas_alvo['LapTime'].dt.total_seconds()
 
-# Gap para todas as voltas (52 a 57)
-voltas = np.arange(52, 58)
-if len(gap_evolution) < len(voltas):
-    gap_evolution.extend([gap_evolution[-1]] * (len(voltas) - len(gap_evolution)))
+    # Prepara os tempos de volta para a simulação
+    tempos_cacador = voltas_cacador['LapTimeSeconds'].values
+    tempos_alvo = voltas_alvo['LapTimeSeconds'].values
+    
+    # Garante que ambos os arrays tenham o mesmo tamanho
+    min_laps = min(len(tempos_cacador), len(tempos_alvo))
+    tempos_cacador = tempos_cacador[:min_laps]
+    tempos_alvo = tempos_alvo[:min_laps]
+    
+    gap_evolution = [gap_inicial]
+    ultrapassagem_volta = None
+    
+    print(f"Parâmetros: Gap Inicial={gap_inicial}s, Penalidade Ar Sujo={penalidade_ar_sujo}s, Desgaste Pneu={perda_ritmo_pneu}s/volta")
 
-#  Resultados e Gráficos
-print(f"\nResumo da Simulação:")
-print(f"Gap inicial: {initial_gap} segundos")
-print(f"Gap final após simulação: {gap_evolution[-1]:.2f} segundos")
-if ultrapassagem_volta:
-    print(f"✅ Ultrapassagem ocorreu na volta {ultrapassagem_volta}")
-else:
-    print(f"❌ Sem ultrapassagem")
+    for i in range(min_laps):
+        # O tempo simulado do piloto alvo é seu tempo real + penalidades
+        tempo_alvo_simulado = tempos_alvo[i] + penalidade_ar_sujo + (i * perda_ritmo_pneu)
+        
+        # O ganho/perda na volta é a diferença entre os tempos
+        gap_change = tempo_alvo_simulado - tempos_cacador[i]
+        
+        current_gap = gap_evolution[-1] - gap_change
+        
+        if current_gap < 0 and ultrapassagem_volta is None:
+            ultrapassagem_volta = volta_inicial + i # A ultrapassagem acontece no final da volta i
+        
+        gap_evolution.append(current_gap)
 
-# Gráfico de Comparação de Tempos
-plt.figure(figsize=(10, 5))
-plt.plot(voltas_russell['LapNumber'], voltas_russell['LapTimeSeconds'], marker='o', color='blue', label='Russell (Real)')
-plt.plot(voltas_norris['LapNumber'], voltas_norris['LapTimeSeconds'], marker='o', color='red', label='Norris (Real)')
-plt.title('Comparação de Ritmo nas Voltas Finais (Real)')
-plt.xlabel('Volta')
-plt.ylabel('Tempo (segundos)')
-plt.legend()
-plt.grid(True)
-plt.gca().invert_yaxis()
+    voltas_simuladas = np.arange(volta_inicial, volta_inicial + min_laps + 1)
 
+    # --- Plotagem dos Resultados ---
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    
+    # Gráfico 1: Comparação de Ritmo
+    ax1.plot(voltas_alvo['LapNumber'], tempos_alvo, marker='o', color='deepskyblue', label=f'{piloto_alvo} (Tempo Real)')
+    ax1.plot(voltas_cacador['LapNumber'], tempos_cacador, marker='o', color='darkorange', label=f'{piloto_cacador} (Tempo Real)')
+    ax1.set_title('Comparativo de Ritmo de Volta (Dados Reais)')
+    ax1.set_ylabel('Tempo de Volta (s)')
+    ax1.grid(True, linestyle='--')
+    ax1.legend()
 
-locs, _ = plt.yticks()
-plt.yticks(locs, [format_time(t) for t in locs])
-plt.xlim(52, 57)
-plt.show()
+    # Gráfico 2: Evolução do Gap (Simulação)
+    ax2.plot(voltas_simuladas, gap_evolution, marker='x', color='purple', label='Gap Simulado')
+    ax2.axhline(0, color='black', linestyle='--', alpha=0.7, label='Ponto de Ultrapassagem')
+    if ultrapassagem_volta:
+        ax2.axvline(ultrapassagem_volta, color='green', linestyle=':', label=f'Ultrapassagem na Volta {ultrapassagem_volta}')
+    ax2.set_title('Evolução do Gap (Simulação)')
+    ax2.set_xlabel('Número da Volta')
+    ax2.set_ylabel('Gap para o piloto alvo (s)')
+    ax2.grid(True, linestyle='--')
+    ax2.legend()
+    
+    plt.tight_layout()
+    plt.show()
 
-# Gráfico de Evolução do Gap 
-plt.figure(figsize=(10, 4))
-plt.plot(voltas, gap_evolution[:len(voltas)], marker='x', color='purple')
-plt.title('Evolução do Gap - Norris vs Russell (Simulação)')
-plt.xlabel('Volta')
-plt.ylabel('Gap (s)')
-plt.axhline(0, color='black', linestyle='--', alpha=0.7)
+    # Resultados Finais
+    resultados = {
+        "gap_final": gap_evolution[-1],
+        "ultrapassagem_ocorrida": bool(ultrapassagem_volta),
+        "volta_da_ultrapassagem": ultrapassagem_volta
+    }
+    
+    print(f"Resultado da Simulação: Gap Final = {resultados['gap_final']:.2f}s. Ultrapassagem: {'Sim' if resultados['ultrapassagem_ocorrida'] else 'Não'}")
+    return resultados
 
-
-if ultrapassagem_volta:
-    plt.axvline(ultrapassagem_volta, color='green', linestyle=':', label=f'Ultrapassagem na volta {ultrapassagem_volta}')
-    plt.legend()
-
-plt.grid(True)
-plt.show()
+# --- Execução  ---
+if __name__ == "__main__":
+    session = fastf1.get_session(2025, 'Bahrain', 'R')
+    session.load()
+    
+    simular_batalha_final(
+        session=session,
+        piloto_cacador='NOR',
+        piloto_alvo='RUS',
+        volta_inicial=52,
+        gap_inicial=2.6
+    )
